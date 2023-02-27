@@ -17,6 +17,12 @@ const (
 )
 
 func main() {
+
+	//for i := 0; i < 32662; i++ {
+	//	fileName := fmt.Sprintf("es%v.txt", i)
+	//	os.Remove(fileName)
+	//}
+
 	file, err := createRandom()
 	if err != nil {
 		log.Fatal(err)
@@ -58,7 +64,8 @@ func sortFiles(file *os.File) ([]string, error) {
 
 	scanner := bufio.NewScanner(file)
 	file.Seek(0, 0)
-	for i := 0; scanner.Scan(); i++ {
+	ok := true
+	for i := 0; ok; i++ {
 		fileName := fmt.Sprintf("es%v.txt", i)
 
 		sliceNameFiles = append(sliceNameFiles, fileName)
@@ -81,6 +88,9 @@ func sortFiles(file *os.File) ([]string, error) {
 			if len(slice) == limit {
 				break
 			}
+		}
+		if len(slice) == 0 {
+			ok = false
 		}
 
 		sort.Ints(slice)
