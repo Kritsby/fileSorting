@@ -11,6 +11,11 @@ import (
 	"time"
 )
 
+const (
+	notSortedFile = "not_sorted.txt"
+	limit         = 300
+)
+
 func main() {
 	size, err := createRandom()
 	if err != nil {
@@ -23,7 +28,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = openFiles(slice)
+	err = createSliceOfOpenFiles(slice)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -31,7 +36,7 @@ func main() {
 
 // Create file with random value
 func createRandom() (int64, error) {
-	file, err := os.Create("not_sorted.txt")
+	file, err := os.Create(notSortedFile)
 	if err != nil {
 		return 0, err
 	}
@@ -58,30 +63,27 @@ func createRandom() (int64, error) {
 
 // Sort file
 func sortFiles() ([]string, error) {
-	sliceNameFiles := make([]string, 0, 0)
-	file, err := os.Open("not_sorted.txt")
+	var sliceNameFiles []string
+	file, err := os.Open(notSortedFile)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	fileStat, err := file.Stat()
-	fileSize := fileStat.Size()
 
 	scanner := bufio.NewScanner(file)
-
-	for i := 1; scanner.Scan(); i++ {
+	for i := 0; scanner.Scan(); i++ {
 		fileName := fmt.Sprintf("es%v.txt", i)
 
 		sliceNameFiles = append(sliceNameFiles, fileName)
 
 		newFile, err := os.Create(fileName)
+		defer newFile.Close()
 		if err != nil {
 			return nil, err
 		}
 
-		slice := make([]int, 0, 1000)
+		slice := make([]int, 0, limit)
 		for scanner.Scan() {
-			defer newFile.Close()
 			text := fmt.Sprintf("%v\n", scanner.Text())
 
 			newFile.WriteString(text)
@@ -93,14 +95,7 @@ func sortFiles() ([]string, error) {
 
 			slice = append(slice, textInt)
 
-			newFileStat, err := newFile.Stat()
-			if err != nil {
-				return nil, err
-			}
-
-			newFileSize := newFileStat.Size()
-
-			if newFileSize >= fileSize/2 {
+			if len(slice) >= limit {
 				break
 			}
 		}
@@ -123,65 +118,139 @@ func sortFiles() ([]string, error) {
 	return sliceNameFiles, nil
 }
 
-func openFiles(slice []string) error {
-	fmt.Println(len(slice) + 1)
-	in := make([]*os.File, 3, len(slice)+1)
+func createSliceOfOpenFiles(slice []string) error {
+	in := make([]*os.File, len(slice), len(slice))
 	var err error
-	in[0], err = os.Create("sorted.txt")
-	if err != nil {
-		return err
-	}
 
 	for k, v := range slice {
-		in[k+1], err = os.Open(v)
+		in[k], err = os.Open(v)
 		if err != nil {
 			return err
 		}
 	}
 
-	fmt.Println(in)
-
-	_, err = merge(in)
+	sliceFiles, err := mergeFiles(in)
 	if err != nil {
 		return err
+	}
+
+	for i := 0; i < len(slice); i++ {
+		fileName := fmt.Sprintf("es%d.txt", i)
+		err = os.Remove(fileName)
+		if err != nil {
+			return err
+		}
+	}
+
+	for i := 0; i < len(sliceFiles); i++ {
+		fmt.Println(i)
+		if i == len(sliceFiles)-1 {
+			fileName := fmt.Sprintf("sorted%d.txt", i)
+			err = os.Rename(fileName, "sorted.txt")
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		fileName := fmt.Sprintf("sorted%d.txt", i)
+		err = os.Remove(fileName)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func merge(in []*os.File, value ...int) (int, error) {
-	vi := 1
-	if value != nil {
-		vi = value[0]
-	}
-	var transfer int
-	for i := vi; i <= len(in); i++ {
-		for _, v := range in[1:] {
-			scanner := bufio.NewScanner(v)
+func mergeFiles(in []*os.File) ([]string, error) {
+	var firstCounter int
+	var secondCounter int
+	var finalFileSlice []string
+	for i := 0; i < len(in)-1; i++ {
+		finalFileName := fmt.Sprintf("sorted%d.txt", i)
+		finalFile, err := os.Create(finalFileName)
+		defer finalFile.Close()
+		finalFileSlice = append(finalFileSlice, finalFileName)
 
-			for scanner.Scan() {
-				txt := scanner.Text()
+		if err != nil {
+			return nil, err
+		}
+		var j = 1
+		var k = 1
+		firstCounter = lineCounter(in[i])
+		if err != nil {
+			return nil, err
+		}
+		secondCounter = lineCounter(in[i+1])
+		if err != nil {
+			return nil, err
+		}
 
-				txtInt, err := strconv.Atoi(txt)
-				if err != nil {
-					fmt.Println(err)
-				}
-
-				transfer = txtInt
-				if value != nil {
-					if value[1] < txtInt {
-						transfer = value[1]
-					}
-				}
-
-				transfer, err = merge(in, i+1, transfer)
-			}
-			_, err := in[0].WriteString(strconv.Itoa(transfer) + "\n")
+		for j < firstCounter && k < secondCounter {
+			a, err := scanAndConvert(in[i], j)
 			if err != nil {
-				fmt.Println(err)
+				return nil, err
+			}
+			b, err := scanAndConvert(in[i+1], k)
+			if err != nil {
+				return nil, err
+			}
+
+			if a < b {
+				j++
+				finalFile.WriteString(strconv.Itoa(a) + "\n")
+			} else {
+				k++
+				finalFile.WriteString(strconv.Itoa(b) + "\n")
 			}
 		}
+
+		err = lastAdd(j, firstCounter, in[i], finalFile)
+		if err != nil {
+			return nil, err
+		}
+		err = lastAdd(k, secondCounter, in[i+1], finalFile)
+		if err != nil {
+			return nil, err
+		}
+
+		in[i+1] = finalFile
 	}
 
-	return transfer, nil
+	return finalFileSlice, nil
+}
+
+func lineCounter(file *os.File) int {
+	var counter int
+	file.Seek(0, 0)
+	scan := bufio.NewScanner(file)
+	for scan.Scan() {
+		counter++
+	}
+	return counter
+}
+
+func scanAndConvert(file *os.File, offset int) (int, error) {
+	var value string
+	scan := bufio.NewScanner(file)
+	file.Seek(0, 0)
+	for counter := 0; counter < offset && scan.Scan(); counter++ {
+		value = scan.Text()
+	}
+	a, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, err
+	}
+	return a, nil
+}
+
+func lastAdd(offset, counter int, file, finalFile *os.File) error {
+	for ; offset < counter; offset++ {
+		a, err := scanAndConvert(file, offset)
+		if err != nil {
+			return err
+		}
+		finalFile.WriteString(strconv.Itoa(a) + "\n")
+	}
+	return nil
 }
