@@ -162,11 +162,11 @@ func createSliceOfOpenFiles(slice []string) error {
 	return nil
 }
 
-func mergeFiles(in []*os.File) ([]string, error) {
+func mergeFiles(sliceFiles []*os.File) ([]string, error) {
 	var firstCounter int
 	var secondCounter int
 	var finalFileSlice []string
-	for i := 0; i < len(in)-1; i++ {
+	for i := 0; i < len(sliceFiles)-1; i++ {
 		finalFileName := fmt.Sprintf("sorted%d.txt", i)
 		finalFile, err := os.Create(finalFileName)
 		defer finalFile.Close()
@@ -177,21 +177,21 @@ func mergeFiles(in []*os.File) ([]string, error) {
 		}
 		var j = 1
 		var k = 1
-		firstCounter = lineCounter(in[i])
+		firstCounter = lineCounter(sliceFiles[i])
 		if err != nil {
 			return nil, err
 		}
-		secondCounter = lineCounter(in[i+1])
+		secondCounter = lineCounter(sliceFiles[i+1])
 		if err != nil {
 			return nil, err
 		}
 
 		for j < firstCounter && k < secondCounter {
-			a, err := scanAndConvert(in[i], j)
+			a, err := scanAndConvert(sliceFiles[i], j)
 			if err != nil {
 				return nil, err
 			}
-			b, err := scanAndConvert(in[i+1], k)
+			b, err := scanAndConvert(sliceFiles[i+1], k)
 			if err != nil {
 				return nil, err
 			}
@@ -205,16 +205,16 @@ func mergeFiles(in []*os.File) ([]string, error) {
 			}
 		}
 
-		err = lastAdd(j, firstCounter, in[i], finalFile)
+		err = lastAdd(j, firstCounter, sliceFiles[i], finalFile)
 		if err != nil {
 			return nil, err
 		}
-		err = lastAdd(k, secondCounter, in[i+1], finalFile)
+		err = lastAdd(k, secondCounter, sliceFiles[i+1], finalFile)
 		if err != nil {
 			return nil, err
 		}
 
-		in[i+1] = finalFile
+		sliceFiles[i+1] = finalFile
 	}
 
 	return finalFileSlice, nil
